@@ -25,7 +25,7 @@ security never scaled.
 See [PLAN.md](PLAN.md) for the full architecture and roadmap.
 See [THREAT_MODEL.md](THREAT_MODEL.md) for the threat analysis (exfiltration, prompt injection, cross-agent divergence, capability escalation).
 
-## Status — v0.1 (Phase 1 + 2)
+## Status — v0.1 (Phases 1–4)
 
 | Component | Phase | Status |
 |---|---|---|
@@ -34,8 +34,10 @@ See [THREAT_MODEL.md](THREAT_MODEL.md) for the threat analysis (exfiltration, pr
 | `Capability` — schema, token serialization, signing, attenuation | 2 | ✅ implemented |
 | `SQLiteCapabilityBroker` — issuance / revocation / enforcement | 2 | ✅ implemented |
 | `EnforcedStore` — deny-by-default data access layer | 2 | ✅ implemented |
-| `CapabilityGenerator` + `VerifierAgent` (LLM loop) | 3 | 🔧 interface |
-| `MemoryLayer` — provenance + divergence detection | 4 | 🔧 interface |
+| `LLMCapabilityGenerator` — NL policy → capability (local LLM) | 3 | ✅ implemented |
+| `LLMVerifierAgent` — separate-context critic, reject/narrow loop | 3 | ✅ implemented |
+| `CapabilityPipeline` — end-to-end NL → generate → verify → issue | 3 | ✅ implemented |
+| `SQLiteMemoryLayer` — provenance-tagged memory + divergence detection | 4 | ✅ implemented |
 
 ## Install
 
@@ -141,9 +143,9 @@ pytest
 
 ## Roadmap
 
-Phases 1 and 2 ship here. Phases 3–4 (LLM capability generation/verification,
-memory + divergence detection) are scaffolded as interfaces in
-[`src/aegis/broker.py`](src/aegis/broker.py). See [PLAN.md](PLAN.md).
+Phases 1–4 ship here. Phase 5 (reference multi-agent demo) and production
+upgrades (asymmetric token signing, SPIFFE/SPIRE identity, Merkle-tree audit log)
+are the remaining items. See [PLAN.md](PLAN.md).
 
 ## License
 

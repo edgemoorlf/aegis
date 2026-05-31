@@ -237,17 +237,22 @@ class CapabilityGenerator(Protocol):
 
     Runs against a *local* model by default (llama.cpp / Ollama / vLLM) so
     context never leaves the trust boundary.
+
+    ``agent_id`` added to propose() so the generator can embed the correct
+    identity in the proposed Capability.
     """
 
-    def propose(self, *, policy: str, task: str, schema: dict[str, Any]) -> Capability: ...
+    def propose(
+        self, *, policy: str, task: str, schema: dict[str, Any], agent_id: str
+    ) -> Capability: ...
 
 
 class VerifierAgent(Protocol):
     """Independent critic that audits a proposed capability.
 
     MUST run in a separate model context from the generator to avoid
-    self-justification. Returns an approval decision plus a narrowed capability
-    when over-permissioning is detected.
+    self-justification. Returns a VerdictProtocol with an approval decision
+    plus an optional narrowed capability when over-permissioning is detected.
     """
 
     def review(self, proposed: Capability, *, policy: str) -> "VerdictProtocol": ...

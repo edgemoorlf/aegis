@@ -171,11 +171,16 @@ historical reason capability-based security never scaled.
 | `SQLiteCapabilityBroker` — issue / revoke / check / decode | ✅ Shipped (v0.1.0) | `broker.py` |
 | `EnforcedStore` — deny-by-default data access layer | ✅ Shipped (v0.1.0) | `enforced_store.py` |
 | `AccessDeniedError` | ✅ Shipped (v0.1.0) | `enforced_store.py` |
-| `CapabilityGenerator` / `VerifierAgent` — Protocols | ✅ Scaffolded (v0.1.0) | `broker.py` |
-| `MemoryLayer` — abstract interface (ABC) | ✅ Scaffolded (v0.1.0) | `broker.py` |
-| `CapabilityGenerator` — local-LLM-backed | ⬜ Not started | — |
-| `VerifierAgent` — separate model context, reject/narrow loop | ⬜ Not started | — |
-| `MemoryLayer` — provenance store + divergence detection | ⬜ Not started | — |
+| `CapabilityGenerator` Protocol (+ `agent_id` in `propose()`) | ✅ Shipped (v0.1.0) | `broker.py` |
+| `VerifierAgent` / `VerdictProtocol` — Protocols | ✅ Shipped (v0.1.0) | `broker.py` |
+| `MemoryLayer` — abstract interface (ABC) | ✅ Shipped (v0.1.0) | `broker.py` |
+| `LLMClient` Protocol + `OllamaLLMClient` + `MockLLMClient` | ✅ Shipped (v0.1.0) | `llm.py` |
+| `LLMCapabilityGenerator` — local-LLM-backed, least-privilege prompts | ✅ Shipped (v0.1.0) | `generator.py` |
+| `LLMVerifierAgent` — separate model context, reject/narrow loop | ✅ Shipped (v0.1.0) | `verifier.py` |
+| `Verdict` dataclass (satisfies `VerdictProtocol`) | ✅ Shipped (v0.1.0) | `verifier.py` |
+| `CapabilityPipeline` — NL → generate → verify → issue | ✅ Shipped (v0.1.0) | `pipeline.py` |
+| `SQLiteMemoryLayer` — provenance store + divergence detection | ✅ Shipped (v0.1.0) | `memory.py` |
+| `MemoryEntry` dataclass | ✅ Shipped (v0.1.0) | `memory.py` |
 | Reference multi-agent demo | ⬜ Not started | — |
 
 ### What Phase 0 hardened into code
@@ -211,14 +216,14 @@ The "spec" work for Phase 0 was resolved implicitly during Phase 1 implementatio
 - [ ] Agent identity via SPIFFE/SPIRE or signed agent certs. *(v1 uses agent_id in token; production upgrade documented in THREAT_MODEL.md)*
 
 ### Phase 3 — LLM Capability Generation + Verification
-- [ ] `CapabilityGenerator` backed by a local model (Ollama / llama.cpp / vLLM).
-- [ ] `VerifierAgent` running in a *separate* model context with reject/narrow loop.
-- [ ] End-to-end: NL policy → generated capability → verified → issued → enforced.
+- [x] `LLMCapabilityGenerator` backed by `OllamaLLMClient` (local model, zero new deps).
+- [x] `LLMVerifierAgent` running in a *separate* model context; enforces separate-instance check at construction. Reject/narrow loop.
+- [x] End-to-end: NL policy → generated capability → verified → issued → enforced. (`CapabilityPipeline`)
 
 ### Phase 4 — Memory Layer + Discrepancy Detection
-- [ ] Concrete `MemoryLayer`: provenance-tagged writes `(agent_id, source_version, ts)`.
-- [ ] Snapshot-based memory consistency across agents.
-- [ ] Divergence detector comparing memory provenance vs. audit log.
+- [x] `SQLiteMemoryLayer`: provenance-tagged writes `(agent_id, source_version, ts)`.
+- [x] Snapshot-based: `snapshot(agent_id)` returns consistent point-in-time view.
+- [x] Divergence detector: unverified-source and cross-agent-conflict detection against audit log.
 
 ### Phase 5 — Reference Multi-Agent Demo
 - [ ] A 3-agent scenario showing: a malicious/buggy agent is contained by the data
