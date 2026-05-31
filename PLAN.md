@@ -158,33 +158,67 @@ historical reason capability-based security never scaled.
 
 ---
 
+## Implementation Status
+
+> Last updated: 2026-05-30. Shipped items are reflected in `src/aegis/`.
+
+| Component | Status | Module |
+|---|---|---|
+| `ImmutableStore` — append-only, versioned, time-travel reads | ✅ Shipped (v0.1.0) | `store.py` |
+| `AuditLog` — hash-chained, tamper-evident, insert-only | ✅ Shipped (v0.1.0) | `audit.py` |
+| `Capability` + `DataSelector` — schema, attenuation, HMAC signing | ✅ Shipped (v0.1.0) | `capability.py` |
+| `CapabilityBroker` — ABC (+ `decode()`) | ✅ Shipped (v0.1.0) | `broker.py` |
+| `SQLiteCapabilityBroker` — issue / revoke / check / decode | ✅ Shipped (v0.1.0) | `broker.py` |
+| `EnforcedStore` — deny-by-default data access layer | ✅ Shipped (v0.1.0) | `enforced_store.py` |
+| `AccessDeniedError` | ✅ Shipped (v0.1.0) | `enforced_store.py` |
+| `CapabilityGenerator` / `VerifierAgent` — Protocols | ✅ Scaffolded (v0.1.0) | `broker.py` |
+| `MemoryLayer` — abstract interface (ABC) | ✅ Scaffolded (v0.1.0) | `broker.py` |
+| `CapabilityGenerator` — local-LLM-backed | ⬜ Not started | — |
+| `VerifierAgent` — separate model context, reject/narrow loop | ⬜ Not started | — |
+| `MemoryLayer` — provenance store + divergence detection | ⬜ Not started | — |
+| Reference multi-agent demo | ⬜ Not started | — |
+
+### What Phase 0 hardened into code
+
+The "spec" work for Phase 0 was resolved implicitly during Phase 1 implementation:
+- **Capability token schema** is formal and typed: `Capability` dataclass with
+  `DataSelector`, `operations: frozenset[str]`, `agent_id`, `issued_by`, `not_after`,
+  HMAC signing, and attenuation invariants enforced at the type level.
+- **Audit log entry schema** is concrete: `AuditEntry` with `seq`, `ts`, `actor`,
+  `action`, `target`, `capability_id`, `details`, `prev_hash`, `entry_hash`.
+- **Tamper-evidence scheme** is implemented: SHA-256 hash chain from a genesis hash;
+  `AuditLog.verify()` recomputes the chain and raises `TamperError` on any break.
+- **Threat model document** is not yet written as a standalone artifact.
+
+---
+
 ## Roadmap
 
 ### Phase 0 — Spec & Threat Model
-- [ ] Write the threat model document (data exfiltration, prompt injection in
-      retrieved data, cross-agent divergence, capability escalation).
-- [ ] Define the capability token schema formally.
-- [ ] Define the audit log entry schema and tamper-evidence scheme.
+- [x] Write the threat model document (data exfiltration, prompt injection in
+      retrieved data, cross-agent divergence, capability escalation). *(see `THREAT_MODEL.md`)*
+- [x] Define the capability token schema formally. *(done in `capability.py`)*
+- [x] Define the audit log entry schema and tamper-evidence scheme. *(done in `audit.py`)*
 
 ### Phase 1 — Immutable Store + Audit Log (the foundation)
-- [ ] Append-only versioned store with time-travel reads (Iceberg/Delta or custom).
-- [ ] Hash-chained append-only audit log with a write-only agent interface.
-- [ ] Reference SDK: `read(selector, @version)`, `append(record)`, `query(...)`.
+- [x] Append-only versioned store with time-travel reads. *(SQLite-backed `ImmutableStore`)*
+- [x] Hash-chained append-only audit log with a write-only agent interface. *(SHA-256 chain, `AuditLog`)*
+- [x] Reference SDK: `read()`, `append()`, `tombstone()`, `history()`, `scan()`, `verify()`.
 
 ### Phase 2 — Capability Broker + Enforcement
-- [ ] Token issuance / revocation / TTL service.
-- [ ] Data access layer that *enforces* tokens (deny-by-default).
-- [ ] Agent identity via SPIFFE/SPIRE or signed agent certs.
+- [x] Concrete `CapabilityBroker`: issuance, revocation, TTL — every decision audited. *(SQLiteCapabilityBroker)*
+- [x] Data access layer that *enforces* tokens (deny-by-default). *(EnforcedStore)*
+- [ ] Agent identity via SPIFFE/SPIRE or signed agent certs. *(v1 uses agent_id in token; production upgrade documented in THREAT_MODEL.md)*
 
 ### Phase 3 — LLM Capability Generation + Verification
-- [ ] Capability Generator against a local model.
-- [ ] Verifier Agent (separate context) with reject/narrow loop.
+- [ ] `CapabilityGenerator` backed by a local model (Ollama / llama.cpp / vLLM).
+- [ ] `VerifierAgent` running in a *separate* model context with reject/narrow loop.
 - [ ] End-to-end: NL policy → generated capability → verified → issued → enforced.
 
 ### Phase 4 — Memory Layer + Discrepancy Detection
-- [ ] Provenance-tagged memory store.
+- [ ] Concrete `MemoryLayer`: provenance-tagged writes `(agent_id, source_version, ts)`.
 - [ ] Snapshot-based memory consistency across agents.
-- [ ] Divergence detector comparing memory vs. audit log.
+- [ ] Divergence detector comparing memory provenance vs. audit log.
 
 ### Phase 5 — Reference Multi-Agent Demo
 - [ ] A 3-agent scenario showing: a malicious/buggy agent is contained by the data

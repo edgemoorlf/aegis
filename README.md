@@ -23,15 +23,17 @@ verified by a verifier agent*, removing the historical reason capability-based
 security never scaled.
 
 See [PLAN.md](PLAN.md) for the full architecture and roadmap.
+See [THREAT_MODEL.md](THREAT_MODEL.md) for the threat analysis (exfiltration, prompt injection, cross-agent divergence, capability escalation).
 
-## Status — v1 (Phase 1 foundation)
+## Status — v0.1 (Phase 1 + 2)
 
 | Component | Phase | Status |
 |---|---|---|
 | `ImmutableStore` — append-only, versioned, time-travel | 1 | ✅ implemented |
 | `AuditLog` — hash-chained, tamper-evident | 1 | ✅ implemented |
-| `Capability` — schema, signing, attenuation | 2 (foundation) | ✅ implemented |
-| `CapabilityBroker` — issuance / revocation / enforcement | 2 | 🔧 interface |
+| `Capability` — schema, token serialization, signing, attenuation | 2 | ✅ implemented |
+| `SQLiteCapabilityBroker` — issuance / revocation / enforcement | 2 | ✅ implemented |
+| `EnforcedStore` — deny-by-default data access layer | 2 | ✅ implemented |
 | `CapabilityGenerator` + `VerifierAgent` (LLM loop) | 3 | 🔧 interface |
 | `MemoryLayer` — provenance + divergence detection | 4 | 🔧 interface |
 
@@ -66,22 +68,49 @@ assert len(store.history("ledger", "balance")) == 3
 assert audit.verify() is True
 ```
 
-Capabilities (Phase 2 foundation) scope access and attenuate without the issuer:
+Phase 2 adds `SQLiteCapabilityBroker` and `EnforcedStore` — deny-by-default
+enforcement with a full audit trail:
 
 ```python
-from aegis import Capability, DataSelector, READ, APPEND
+from aegis import (
+    ImmutableStore, AuditLog, Capability, DataSelector,
+    SQLiteCapabilityBroker, EnforcedStore,
+    READ, APPEND, TOMBSTONE, AccessDeniedError,
+)
 import time
 
+store  = ImmutableStore()
+audit  = AuditLog()
+broker = SQLiteCapabilityBroker(audit, secret=b"keep-this-secret")
+estore = EnforcedStore(store, broker, audit)
+
+# Issue a scoped capability token to an agent
 cap = Capability(
     selector=DataSelector("ledger"),
     operations=frozenset({READ, APPEND}),
     agent_id="agent-a",
-    issued_by="broker",
+    issued_by="admin",
     not_after=time.time() + 3600,
 )
-read_only = cap.attenuate(operations=frozenset({READ}))   # strictly narrower
-assert cap.permits("ledger", "balance", APPEND)
-assert not read_only.permits("ledger", "balance", APPEND)
+token = broker.issue(cap)
+
+# All access goes through the enforced store
+v = estore.append(token, "ledger", "balance", {"amount": 100})
+assert estore.read(token, "ledger", "balance").value == {"amount": 100}
+
+# Revoke immediately; subsequent access is denied
+broker.revoke(cap.capability_id, by="admin")
+try:
+    estore.read(token, "ledger", "balance")
+except AccessDeniedError:
+    pass  # denied — as expected
+
+# Attenuation: derive a read-only token without contacting the issuer
+read_token = broker.issue(cap.attenuate(operations=frozenset({READ})))
+assert estore.read(read_token, "ledger", "balance").value == {"amount": 100}
+
+# The audit chain covers every issuance, check, and data operation
+assert audit.verify() is True
 ```
 
 ## Demo
@@ -112,9 +141,9 @@ pytest
 
 ## Roadmap
 
-Phase 1 ships here. Phases 2–4 (broker + enforcement, LLM capability
-generation/verification, memory + divergence detection) are scaffolded as
-interfaces in [`src/aegis/broker.py`](src/aegis/broker.py). See [PLAN.md](PLAN.md).
+Phases 1 and 2 ship here. Phases 3–4 (LLM capability generation/verification,
+memory + divergence detection) are scaffolded as interfaces in
+[`src/aegis/broker.py`](src/aegis/broker.py). See [PLAN.md](PLAN.md).
 
 ## License
 

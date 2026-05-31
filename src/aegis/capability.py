@@ -13,12 +13,13 @@ and is what makes least-privilege delegation cheap.
 
 from __future__ import annotations
 
+import base64
 import json
 import time
 import uuid
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
-from typing import Optional
+from typing import Any, Optional
 
 # Operations are deliberately coarse in v1; refine toward cell/semantic later.
 READ = "read"
@@ -125,3 +126,39 @@ class Capability:
 
     def verify_signature(self, signature: str, secret: bytes) -> bool:
         return self.sign(secret) == signature
+
+    # -- token serialisation -------------------------------------------------
+
+    def to_token(self, secret: bytes) -> str:
+        """Serialize this capability to a signed, opaque URL-safe token string."""
+        envelope: dict[str, Any] = {"payload": self._payload(), "sig": self.sign(secret)}
+        raw = _canonical(envelope).encode("utf-8")
+        return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+    @classmethod
+    def from_token(cls, token: str, secret: bytes) -> "Capability":
+        """Deserialize and verify a signed token. Raises ValueError on any failure."""
+        try:
+            padding = (4 - len(token) % 4) % 4
+            raw = base64.urlsafe_b64decode(token + "=" * padding)
+            envelope = json.loads(raw)
+            payload: dict[str, Any] = envelope["payload"]
+            sig: str = envelope["sig"]
+        except Exception as exc:
+            raise ValueError(f"malformed token: {exc}") from exc
+
+        cap = cls(
+            selector=DataSelector(
+                collection=str(payload["collection"]),
+                key=payload.get("key"),
+            ),
+            operations=frozenset(str(o) for o in payload["operations"]),
+            agent_id=str(payload["agent_id"]),
+            issued_by=str(payload["issued_by"]),
+            not_after=float(payload["not_after"]),
+            capability_id=str(payload["capability_id"]),
+            issued_at=float(payload["issued_at"]),
+        )
+        if not cap.verify_signature(sig, secret):
+            raise ValueError("token signature verification failed")
+        return cap
